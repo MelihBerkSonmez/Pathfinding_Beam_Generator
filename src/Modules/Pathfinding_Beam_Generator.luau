@@ -119,6 +119,11 @@ function Pathfinding_Beam_Generator:Find_Path(Player :Player, Goal :Vector3)
 
     Path:ComputeAsync(Character.HumanoidRootPart.Position, Goal)
 
+    if not (Path.Status == Enum.PathStatus.Success) then
+       warn("Can not find a path. Request rejected")
+       return false 
+    end
+
     return Path
 end
 
@@ -183,6 +188,11 @@ end
 function Pathfinding_Beam_Generator:Guide_Player(Player :Player, Goal :Vector3)
 
     local Path = self:Find_Path(Player, Goal)
+
+    if not Path then
+        return
+    end
+
     self:Create_Beams(Path)
     self:Get_Character_Infos(Player)
     task.delay(3, function()
@@ -199,10 +209,14 @@ function Pathfinding_Beam_Generator:Guide_Player(Player :Player, Goal :Vector3)
 
     local Previous_Waypoints = Path:GetWaypoints()
 
-    self.Connection = RunService:BindToRenderStep("Recreate_Beams",301,function()
+    self.Connection =  RunService.RenderStepped:Connect(function()
 
         local New_Path = self:Find_Path(Player, Goal)
         local New_Waypoints = New_Path:GetWaypoints()
+
+        if #New_Waypoints < 3 then
+            self:Destroy_Player_Path(Player)
+        end
 
         -- Check if waypoints count is not the same, then recreate all beams
         if #New_Waypoints ~= #Previous_Waypoints then
@@ -230,7 +244,7 @@ function Pathfinding_Beam_Generator:Get_Character_Infos(Player :Player)
 
     local Character = Player.Character or Player.CharacterAdded:Wait()
 
-    local Orientation, Size :Vector3 = Character:GetBoundingBox()
+    local _, Size :Vector3 = Character:GetBoundingBox()
 
     self.Agent_Parameters.AgentRadius = Size.X
     self.Agent_Parameters.AgentHeight = Size.Y
@@ -265,19 +279,36 @@ function Pathfinding_Beam_Generator:Send_Info_Ball(Path :Path, Ball :BasePart)
 
         for i = 1, #Waypoints - 1 do
 
-            if not Info_Ball then
+            if not self.Info_Ball or not Info_Ball then
                 return
             end
 
-            if not Waypoints[i + 1] then
-                
+            if i + 1 == #Waypoints then
+
                 local Fade_In_Tween = TweenService:Create(
-                    Info_Ball, 
+                    Info_Ball,
                     TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.In, 0, false, 0),
                     {Transparency = 1}
                 )
 
+
+                local Point_Light = Info_Ball and Info_Ball:FindFirstChildOfClass("PointLight")
+
+                if Point_Light then
+
+                    local Fade_In_Light_Tween = TweenService:Create(
+                    Point_Light,
+                    TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.In, 0, false, 0),
+                    {Brightness = 0}
+                )
+
+                     Fade_In_Light_Tween:Play()
+
+                end
+
+
                 Fade_In_Tween:Play()
+               
 
                 Fade_In_Tween.Completed:Once(function()
                     Info_Ball:Destroy()
